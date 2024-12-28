@@ -7,7 +7,7 @@ A simple Android app that connects to body-worn heart rate monitors via Bluetoot
 - **Permissions**: Automatic prompt to turn on bluetooth and location services.
 
 ## Preview
-![Screenshot of Simple Heart Rate Monitor](https://i.imgur.com/zVvVMwg.png))
+![Screenshot of Simple Heart Rate Monitor](https://i.imgur.com/zVvVMwg.png)
 
 ## Installation
 ### Android Device
@@ -15,7 +15,7 @@ Download on Google Play: [Simple Heart Rate Monitor](https://play.google.com/sto
 
 
 ## Usage
-- **Connect**: Click CONNECT and choose the desired body-worn heart rate monitor. your [𝑥, 𝑦] coordinate values in the text fields labeled "Point 1" to "Point 26".
+- **Connect**: Click CONNECT and choose the desired body-worn heart rate monitor.
 - **Resize number**: Use on-screen buttons to resize the number.
 
 ## Task list
