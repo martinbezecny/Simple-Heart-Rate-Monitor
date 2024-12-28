@@ -11,7 +11,7 @@ A simple Android app that connects to body-worn heart rate monitors via Bluetoot
 
 ## Installation
 ### Android Device
-Download on Google Play: [🤖 Simple Heart Rate Monitor](https://play.google.com/store/apps/details?id=com.martinbartin.simpleheartratemonitor))
+Download on Google Play: [ Simple Heart Rate Monitor](https://play.google.com/store/apps/details?id=com.martinbartin.simpleheartratemonitor)
 
 
 ## Usage
