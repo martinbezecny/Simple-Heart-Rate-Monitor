@@ -1,4 +1,4 @@
-# Simple-Heart-Rate-Monitor
+# Simple Heart Rate Monitor
 A simple Android app that connects to body-worn heart rate monitors via Bluetooth and displays heart rate. Simple user interface, no user account needed, no setup needed. Works with most heart rate monitors such as Polar H10, Garmin HRM-Pro, Wahoo TICKR, but even budget monitors such as Coospo H808S etc.
 
 ## Features
