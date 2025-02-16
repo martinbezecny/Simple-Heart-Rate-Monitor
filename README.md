@@ -18,9 +18,11 @@ Download on Google Play: [Simple Heart Rate Monitor](https://play.google.com/sto
 ## Usage
 - **Connect**: Click CONNECT and choose the desired body-worn heart rate monitor.
 - **Resize number**: Use on-screen buttons to resize the number.
+- **Reset average**: Click the average value to reset it.
 
 ## Task list
 - [x] Fix a bug where a lot of "Unknown Devices" are displayed during search.
+- [x] Add an average value.
 
 ## Contributing
 Feel free to submit issues or pull requests for improvements or bug fixes! Contributions are welcomed.
