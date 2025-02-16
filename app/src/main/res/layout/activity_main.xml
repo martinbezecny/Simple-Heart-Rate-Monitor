@@ -35,15 +35,46 @@
         android:drawableLeft="@android:drawable/stat_sys_data_bluetooth"
         android:text="Connect" />
 
-    <TextView
-        android:id="@+id/txtHeartRate"
-        android:layout_width="match_parent"
+    <LinearLayout
+        android:id="@+id/bpmBlock"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
-        android:gravity="center"
-        android:text="---"
-        android:textColor="#000000"
-        android:textSize="190sp"
-        android:textStyle="bold"
-        android:keepScreenOn="true" />
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:id="@+id/txtHeartRate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="---"
+            android:textColor="#000000"
+            android:textSize="190sp"
+            android:textStyle="bold"
+            android:keepScreenOn="true" />
+
+        <TextView
+            android:id="@+id/txtAverageHeartRate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Avg: ---"
+            android:textColor="#000000"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground" />
+
+        <TextView
+            android:id="@+id/txtResetHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Click to reset."
+            android:textColor="#808080"
+            android:textSize="14sp"
+            android:layout_marginTop="4sp" />
+    </LinearLayout>
 </RelativeLayout>
