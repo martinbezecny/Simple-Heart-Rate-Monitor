@@ -31,7 +31,11 @@ class MainActivity : AppCompatActivity() {
     private val devices = ArrayList<String>()
     private var bluetoothGatt: BluetoothGatt? = null
     private var devicesDialog: AlertDialog? = null
-    private lateinit var txtHeartRate: TextView  // Define the TextView variable at the class level
+    private lateinit var txtHeartRate: TextView
+    private lateinit var txtAverageHeartRate: TextView
+
+    // List to store BPM values for calculating the average
+    private val bpmValues = mutableListOf<Int>()
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 101
@@ -45,7 +49,8 @@ class MainActivity : AppCompatActivity() {
         val connectButton = findViewById<Button>(R.id.btnConnect)
         val btnDecrease = findViewById<Button>(R.id.btnDecrease)
         val btnIncrease = findViewById<Button>(R.id.btnIncrease)
-        txtHeartRate = findViewById<TextView>(R.id.txtHeartRate)  // Initialize the TextView
+        txtHeartRate = findViewById(R.id.txtHeartRate)
+        txtAverageHeartRate = findViewById(R.id.txtAverageHeartRate)
 
         devicesArrayAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, devices)
 
@@ -70,6 +75,11 @@ class MainActivity : AppCompatActivity() {
         btnIncrease.setOnClickListener {
             val currentSize = txtHeartRate.textSize / resources.displayMetrics.scaledDensity
             txtHeartRate.textSize = currentSize + 10
+        }
+
+        // Set up the click listener for the average BPM TextView
+        txtAverageHeartRate.setOnClickListener {
+            resetAverageBPM()
         }
 
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
@@ -140,6 +150,7 @@ class MainActivity : AppCompatActivity() {
                     val heartRate = extractHeartRate(characteristic)
                     runOnUiThread {
                         txtHeartRate.text = heartRate.toString()
+                        updateAverageBPM(heartRate) // Update the average BPM
                     }
                 }
             }
@@ -154,6 +165,19 @@ class MainActivity : AppCompatActivity() {
                 return characteristic.getIntValue(format, 1)
             }
         })
+    }
+
+    // Helper function to update the average BPM
+    private fun updateAverageBPM(newBPM: Int) {
+        bpmValues.add(newBPM) // Add the new BPM value to the list
+        val average = bpmValues.average().toInt() // Calculate the average
+        txtAverageHeartRate.text = "Avg: $average" // Update the UI
+    }
+
+    // Helper function to reset the average BPM
+    private fun resetAverageBPM() {
+        bpmValues.clear() // Clear the list of BPM values
+        txtAverageHeartRate.text = "Avg: ---" // Reset the UI
     }
 
     private fun checkAndRequestPermissions() {
