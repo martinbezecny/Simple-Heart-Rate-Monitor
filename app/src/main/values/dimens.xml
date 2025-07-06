@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="heart_rate_text_size">190sp</dimen>
+    <dimen name="average_heart_rate_text_size">40sp</dimen>
+    <dimen name="reset_hint_text_size">14sp</dimen>
+    <dimen name="button_increase_text_size">28sp</dimen>
+    <dimen name="button_decrease_text_size">18sp</dimen>
+
+    <dimen name="button_control_width">80sp</dimen>
+    <dimen name="button_control_height">60sp</dimen>
+    <dimen name="button_connect_width">120sp</dimen>
+</resources>
