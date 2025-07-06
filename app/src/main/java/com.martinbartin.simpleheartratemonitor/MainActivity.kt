@@ -1,6 +1,7 @@
 package com.martinbartin.simpleheartratemonitor
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -13,12 +14,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -26,48 +29,77 @@ import androidx.core.content.ContextCompat
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
-    private var bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+
+    private val bluetoothAdapter: BluetoothAdapter? by lazy { BluetoothAdapter.getDefaultAdapter() }
     private lateinit var devicesArrayAdapter: ArrayAdapter<String>
-    private val devices = ArrayList<String>()
+    private val discoveredDevices = ArrayList<BluetoothDevice>()
+
     private var bluetoothGatt: BluetoothGatt? = null
     private var devicesDialog: AlertDialog? = null
     private lateinit var txtHeartRate: TextView
     private lateinit var txtAverageHeartRate: TextView
 
-    // List to store BPM values for calculating the average
     private val bpmValues = mutableListOf<Int>()
 
     companion object {
-        private const val LOCATION_PERMISSION_REQUEST_CODE = 101
-        private const val REQUEST_ENABLE_BT = 1
+        private const val PERMISSION_REQUEST_CODE = 101
+        private val HEART_RATE_SERVICE_UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
+        private val HEART_RATE_MEASUREMENT_CHAR_UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
+        private val CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialize UI components
         val connectButton = findViewById<Button>(R.id.btnConnect)
         val btnDecrease = findViewById<Button>(R.id.btnDecrease)
         val btnIncrease = findViewById<Button>(R.id.btnIncrease)
         txtHeartRate = findViewById(R.id.txtHeartRate)
         txtAverageHeartRate = findViewById(R.id.txtAverageHeartRate)
 
-        devicesArrayAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, devices)
+        devicesArrayAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1)
 
-        checkAndRequestPermissions()
+        setupUIListeners(connectButton, btnDecrease, btnIncrease)
 
-        connectButton.setOnClickListener {
-            if (bluetoothAdapter != null && !bluetoothAdapter!!.isEnabled) {
-                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        registerReceiver(receiver, filter)
+
+        checkPermissionsAndProceed()
+    }
+
+    // Modern way to handle permission results
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                showToast(getString(R.string.permissions_granted))
+                initiateBluetoothAction()
             } else {
-                startDiscovery()
+                showToast(getString(R.string.permissions_denied))
             }
+        }
+    }
+
+    // Modern way to handle Activity results (e.g., enabling Bluetooth)
+    private val requestEnableBluetooth = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            startDiscovery()
+        } else {
+            showToast(getString(R.string.bluetooth_required))
+        }
+    }
+
+    private fun setupUIListeners(connectButton: Button, btnDecrease: Button, btnIncrease: Button) {
+        connectButton.setOnClickListener {
+            initiateBluetoothAction()
         }
 
         btnDecrease.setOnClickListener {
             val currentSize = txtHeartRate.textSize / resources.displayMetrics.scaledDensity
-            if (currentSize > 10) {
+            if (currentSize > 20) { // Set a reasonable minimum size
                 txtHeartRate.textSize = currentSize - 10
             }
         }
@@ -77,37 +109,66 @@ class MainActivity : AppCompatActivity() {
             txtHeartRate.textSize = currentSize + 10
         }
 
-        // Set up the click listener for the average BPM TextView
         txtAverageHeartRate.setOnClickListener {
             resetAverageBPM()
         }
+    }
 
-        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
-        filter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-        registerReceiver(receiver, filter)
+    private fun checkPermissionsAndProceed() {
+        val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        val missingPermissions = requiredPermissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), PERMISSION_REQUEST_CODE)
+        } else {
+            initiateBluetoothAction()
+        }
+    }
+
+    private fun initiateBluetoothAction() {
+        bluetoothAdapter?.let { adapter ->
+            if (adapter.isEnabled) {
+                startDiscovery()
+            } else {
+                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                requestEnableBluetooth.launch(enableBtIntent)
+            }
+        } ?: run {
+            showToast(getString(R.string.bluetooth_not_supported))
+        }
     }
 
     private fun startDiscovery() {
-        if (bluetoothAdapter!!.isDiscovering) {
-            bluetoothAdapter!!.cancelDiscovery()
+        if (bluetoothAdapter?.isDiscovering == true) {
+            bluetoothAdapter?.cancelDiscovery()
         }
-        bluetoothAdapter!!.startDiscovery()
-        Toast.makeText(this, "Searching for devices...", Toast.LENGTH_SHORT).show()
+        // Clear previous results
+        devicesArrayAdapter.clear()
+        discoveredDevices.clear()
+        devicesArrayAdapter.notifyDataSetChanged()
+
+        bluetoothAdapter?.startDiscovery()
+        showToast(getString(R.string.searching_for_devices))
         showDeviceListDialog()
     }
 
     private fun showDeviceListDialog() {
+        if (devicesDialog?.isShowing == true) return
+
         val builder = AlertDialog.Builder(this)
-        builder.setTitle("Select a Device")
+        builder.setTitle(getString(R.string.dialog_title_select_device))
         builder.setAdapter(devicesArrayAdapter) { _, which ->
-            val deviceInfo = devices[which]
-            val deviceAddress = deviceInfo.substring(deviceInfo.indexOf("(") + 1, deviceInfo.indexOf(")"))
-            val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
-            device?.let {
-                Toast.makeText(this, "Connecting to ${device.name}...", Toast.LENGTH_SHORT).show()
-                connectDevice(it)
-                devicesDialog?.dismiss()
-            }
+            val device = discoveredDevices[which]
+            showToast(getString(R.string.connecting_to_device, device.name ?: device.address))
+            connectDevice(device)
+            devicesDialog?.dismiss()
         }
         builder.setOnCancelListener { devicesDialog = null }
         devicesDialog = builder.create()
@@ -115,113 +176,71 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectDevice(device: BluetoothDevice) {
-        bluetoothGatt = device.connectGatt(this, false, object : BluetoothGattCallback() {
-            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
+        bluetoothGatt = device.connectGatt(this, false, gattCallback)
+    }
+
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
                     Log.i("BluetoothGatt", "Connected to GATT server.")
-                    gatt.discoverServices()
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    bluetoothGatt?.discoverServices()
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i("BluetoothGatt", "Disconnected from GATT server.")
-                }
-            }
-
-            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    gatt.services.forEach { service ->
-                        Log.i("BluetoothGatt", "Service discovered: ${service.uuid}")
-                        if (service.uuid.toString().equals("0000180d-0000-1000-8000-00805f9b34fb", ignoreCase = true)) {
-                            val heartRateCharacteristic = service.getCharacteristic(UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb"))
-                            if (heartRateCharacteristic != null) {
-                                gatt.setCharacteristicNotification(heartRateCharacteristic, true)
-                                val descriptor = heartRateCharacteristic.getDescriptor(
-                                    UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
-                                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                                gatt.writeDescriptor(descriptor)
-                            }
-                        }
-                    }
-                } else {
-                    Log.w("BluetoothGatt", "onServicesDiscovered received: $status")
-                }
-            }
-
-            override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-                if (characteristic.uuid == UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")) {
-                    val heartRate = extractHeartRate(characteristic)
                     runOnUiThread {
-                        txtHeartRate.text = heartRate.toString()
-                        updateAverageBPM(heartRate) // Update the average BPM
+                        txtHeartRate.text = getString(R.string.bpm_placeholder)
+                        resetAverageBPM()
                     }
                 }
             }
+        }
 
-            private fun extractHeartRate(characteristic: BluetoothGattCharacteristic): Int {
-                val flag = characteristic.properties
-                val format = if (flag and 0x01 != 0) {
-                    BluetoothGattCharacteristic.FORMAT_UINT16
-                } else {
-                    BluetoothGattCharacteristic.FORMAT_UINT8
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                val heartRateService = gatt.getService(HEART_RATE_SERVICE_UUID)
+                val heartRateCharacteristic = heartRateService?.getCharacteristic(HEART_RATE_MEASUREMENT_CHAR_UUID)
+                if (heartRateCharacteristic != null) {
+                    gatt.setCharacteristicNotification(heartRateCharacteristic, true)
+                    val descriptor = heartRateCharacteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID)
+                    descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    gatt.writeDescriptor(descriptor)
                 }
-                return characteristic.getIntValue(format, 1)
+            } else {
+                Log.w("BluetoothGatt", "onServicesDiscovered received: $status")
             }
-        })
-    }
-
-    // Helper function to update the average BPM
-    private fun updateAverageBPM(newBPM: Int) {
-        bpmValues.add(newBPM) // Add the new BPM value to the list
-        val average = bpmValues.average().toInt() // Calculate the average
-        txtAverageHeartRate.text = "Avg: $average" // Update the UI
-    }
-
-    // Helper function to reset the average BPM
-    private fun resetAverageBPM() {
-        bpmValues.clear() // Clear the list of BPM values
-        txtAverageHeartRate.text = "Avg: ---" // Reset the UI
-    }
-
-    private fun checkAndRequestPermissions() {
-        val requiredPermissions = mutableListOf<String>()
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requiredPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-            requiredPermissions.add(Manifest.permission.BLUETOOTH_SCAN)
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            if (characteristic.uuid == HEART_RATE_MEASUREMENT_CHAR_UUID) {
+                val heartRate = extractHeartRate(characteristic)
+                runOnUiThread {
+                    txtHeartRate.text = heartRate.toString()
+                    updateAverageBPM(heartRate)
+                }
+            }
         }
+    }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requiredPermissions.add(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-
-        if (requiredPermissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, requiredPermissions.toTypedArray(), LOCATION_PERMISSION_REQUEST_CODE)
+    private fun extractHeartRate(characteristic: BluetoothGattCharacteristic): Int {
+        val flag = characteristic.value[0].toInt()
+        val format = if ((flag and 0x01) != 0) {
+            BluetoothGattCharacteristic.FORMAT_UINT16
         } else {
-            if (bluetoothAdapter != null && !bluetoothAdapter!!.isEnabled) {
-                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
-            } else {
-                startDiscovery()
-            }
+            BluetoothGattCharacteristic.FORMAT_UINT8
         }
+        return characteristic.getIntValue(format, 1)
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Toast.makeText(this, "All necessary permissions granted.", Toast.LENGTH_SHORT).show()
-                if (bluetoothAdapter != null && !bluetoothAdapter!!.isEnabled) {
-                    val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                    startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
-                } else {
-                    startDiscovery()
-                }
-            } else {
-                Toast.makeText(this, "All necessary permissions must be granted.", Toast.LENGTH_LONG).show()
-            }
-        }
+    private fun updateAverageBPM(newBPM: Int) {
+        bpmValues.add(newBPM)
+        val average = bpmValues.average().toInt()
+        txtAverageHeartRate.text = getString(R.string.average_bpm_prefix) + average.toString()
+    }
+
+    private fun resetAverageBPM() {
+        bpmValues.clear()
+        txtAverageHeartRate.text = getString(R.string.average_bpm_placeholder)
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -229,27 +248,29 @@ class MainActivity : AppCompatActivity() {
             when (intent.action) {
                 BluetoothDevice.ACTION_FOUND -> {
                     val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    if (device != null) {
-                        val deviceName = device.name ?: return
-                        if (deviceName != "Unknown device") {
-                            val deviceAddress = device.address
-                            val deviceEntry = "$deviceName ($deviceAddress)"
-                            if (!devices.contains(deviceEntry)) {
-                                devices.add(deviceEntry)
-                                devicesArrayAdapter.notifyDataSetChanged()
-                            }
+                    device?.let {
+                        val deviceName = it.name
+                        if (deviceName != null && !discoveredDevices.contains(it)) {
+                            discoveredDevices.add(it)
+                            devicesArrayAdapter.add("${it.name}\n${it.address}")
+                            devicesArrayAdapter.notifyDataSetChanged()
                         }
                     }
                 }
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                    Toast.makeText(context, "Done searching for devices.", Toast.LENGTH_SHORT).show()
+                    showToast(getString(R.string.search_finished))
                 }
             }
         }
     }
+    
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
 
     override fun onDestroy() {
         super.onDestroy()
+        bluetoothAdapter?.cancelDiscovery()
         bluetoothGatt?.close()
         unregisterReceiver(receiver)
     }
