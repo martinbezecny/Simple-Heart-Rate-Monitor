@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Simple Heart Rate Monitor</string>
+
+    <string name="connect">Connect</string>
+    <string name="increase_font_symbol">↑A</string>
+    <string name="decrease_font_symbol">↓A</string>
+    <string name="bpm_placeholder">---</string>
+    <string name="average_bpm_placeholder">Avg: ---</string>
+    <string name="average_bpm_prefix">Avg:\u0020</string> <string name="reset_average_hint">Click to reset.</string>
+
+    <string name="content_desc_increase_font">Increase font size</string>
+    <string name="content_desc_decrease_font">Decrease font size</string>
+
+    <string name="permissions_granted">All necessary permissions granted.</string>
+    <string name="permissions_denied">All necessary permissions must be granted to use this app.</string>
+    <string name="bluetooth_required">Bluetooth is required to find devices.</string>
+    <string name="bluetooth_not_supported">Bluetooth is not supported on this device.</string>
+    <string name="searching_for_devices">Searching for devices…</string>
+    <string name="search_finished">Done searching for devices.</string>
+    <string name="dialog_title_select_device">Select a Device</string>
+    <string name="connecting_to_device">Connecting to %1$s…</string> </resources>
