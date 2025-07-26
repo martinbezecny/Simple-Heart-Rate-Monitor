@@ -252,7 +252,7 @@ class MainActivity : AppCompatActivity() {
                         val deviceName = it.name
                         if (deviceName != null && !discoveredDevices.contains(it)) {
                             discoveredDevices.add(it)
-                            devicesArrayAdapter.add("${it.name}\n${it.address}")
+                            devicesArrayAdapter.add(it.name)
                             devicesArrayAdapter.notifyDataSetChanged()
                         }
                     }
@@ -263,7 +263,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
