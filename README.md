@@ -8,7 +8,7 @@ A simple Android app that connects to body-worn heart rate monitors via Bluetoot
 - **Permissions**: Automatic prompt to turn on bluetooth and location services.
 
 ## Preview
-![Screenshot of Simple Heart Rate Monitor](https://i.imgur.com/ZMkXvN0.png)
+![Screenshot of Simple Heart Rate Monitor](https://i.imgur.com/ms1kyjf.png)
 
 ## Installation
 ### Android Device
@@ -23,6 +23,7 @@ Download on Google Play: [Simple Heart Rate Monitor](https://play.google.com/sto
 ## Task list
 - [x] Fix a bug where a lot of "Unknown Devices" are displayed during search.
 - [x] Add an average value.
+- [x] Update for Android 15+
 
 ## Contributing
 Feel free to submit issues or pull requests for improvements or bug fixes! Contributions are welcomed.
