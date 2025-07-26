@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "com.martinbartin.simpleheartratemonitor"
-        minSdk = 21
+        minSdk = 23
         targetSdk = 36
-        versionCode = 7 // Incremented version code
-        versionName = "1.5" // Incremented version name
+        versionCode = 8
+        versionName = "1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -47,6 +47,12 @@ dependencies {
     // Added for registerForActivityResult
     implementation("androidx.activity:activity-ktx:1.8.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // ADDED: Material Components Library dependency
+    // Always check for the latest stable version on Google's Maven Repository:
+    // https://maven.google.com/web/index.html#com.google.android.material:material
+    implementation("com.google.android.material:material:1.12.0") // Using a recent stable version
+
     // --- All Jetpack Compose dependencies have been removed ---
 
     testImplementation(libs.junit)
