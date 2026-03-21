@@ -4,7 +4,8 @@ A simple Android app that connects to body-worn heart rate monitors via Bluetoot
 ## Features
 - **BluetoothGatt**: Connects to body-worn heart rate monitors using Bluetooth Low Energy.
 - **Average Value**: Displays the average value alongside the current value. Average can be reset by clicking.
-- **Font Size**: Size of the font that displays heart rate can be increased or decreased using on-screen buttons.
+- **Font Size**: Size of the font that displays heart rate can be increased or decreased using on-screen buttons. Font size is remembered between sessions.
+- **Light/Dark Mode**: Toggle between modes.
 - **Permissions**: Automatic prompt to turn on bluetooth and location services.
 
 ## Preview
@@ -16,9 +17,9 @@ Download on Google Play: [Simple Heart Rate Monitor](https://play.google.com/sto
 
 
 ## Usage
-- **Connect**: Click CONNECT and choose the desired body-worn heart rate monitor.
+- **Connect**: Tap CONNECT and choose the desired body-worn heart rate monitor.
 - **Resize number**: Use on-screen buttons to resize the number.
-- **Reset average**: Click the average value to reset it.
+- **Reset average**: Tap the average value to reset it.
 
 ## Task list
 - [x] Fix a bug where a lot of "Unknown Devices" are displayed during search.
@@ -30,4 +31,4 @@ Feel free to submit issues or pull requests for improvements or bug fixes! Contr
 
 
 
-© 2024-2025 Martin Bezecný
+© 2024-2026 Martin Bezecný
