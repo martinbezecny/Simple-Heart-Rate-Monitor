@@ -18,13 +18,15 @@ Download on Google Play: [Simple Heart Rate Monitor](https://play.google.com/sto
 
 ## Usage
 - **Connect**: Tap CONNECT and choose the desired body-worn heart rate monitor.
+- **Toggle light/dark mode**: Tap the sun/moon icon to toggle modes.
 - **Resize number**: Use on-screen buttons to resize the number.
 - **Reset average**: Tap the average value to reset it.
 
 ## Task list
 - [x] Fix a bug where a lot of "Unknown Devices" are displayed during search.
 - [x] Add an average value.
-- [x] Update for Android 15+
+- [x] Update for Android 15+.
+- [x] Add dark mode.
 
 ## Contributing
 Feel free to submit issues or pull requests for improvements or bug fixes! Contributions are welcomed.
