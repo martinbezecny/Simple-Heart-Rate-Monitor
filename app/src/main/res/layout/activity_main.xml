@@ -26,10 +26,8 @@
         android:layout_marginTop="8dp"
         android:layout_marginEnd="16dp"
         android:contentDescription="@string/content_desc_increase_font"
-        android:gravity="center"
         android:text="@string/increase_font_symbol"
         android:textSize="@dimen/button_increase_text_size"
-        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -40,10 +38,19 @@
         android:layout_marginTop="8dp"
         android:layout_marginEnd="8dp"
         android:contentDescription="@string/content_desc_decrease_font"
-        android:gravity="center"
         android:text="@string/decrease_font_symbol"
         android:textSize="@dimen/button_decrease_text_size"
         app:layout_constraintEnd_toStartOf="@+id/btnIncrease"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/btnTheme"
+        android:layout_width="@dimen/button_control_width"
+        android:layout_height="@dimen/button_control_height"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:contentDescription="@string/content_desc_toggle_theme"
+        app:layout_constraintEnd_toStartOf="@+id/btnDecrease"
         app:layout_constraintTop_toTopOf="parent" />
 
     <LinearLayout
@@ -61,10 +68,10 @@
             android:id="@+id/txtHeartRate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
+            android:includeFontPadding="false"
             android:keepScreenOn="true"
             android:text="@string/bpm_placeholder"
-            android:textColor="#000000"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="@dimen/heart_rate_text_size"
             android:textStyle="bold" />
 
@@ -72,12 +79,13 @@
             android:id="@+id/txtAverageHeartRate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="-4dp"
             android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true"
-            android:gravity="center"
+            android:includeFontPadding="false"
             android:text="@string/average_bpm_placeholder"
-            android:textColor="#000000"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="@dimen/average_heart_rate_text_size"
             android:textStyle="bold" />
 
@@ -85,10 +93,9 @@
             android:id="@+id/txtResetHint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4sp"
-            android:gravity="center"
+            android:layout_marginTop="2dp"
             android:text="@string/reset_average_hint"
-            android:textColor="#808080"
+            android:textColor="?android:attr/textColorSecondary"
             android:textSize="@dimen/reset_hint_text_size" />
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
