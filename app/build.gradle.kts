@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.martinbartin.simpleheartratemonitor"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.martinbartin.simpleheartratemonitor"
         minSdk = 23
-        targetSdk = 36
-        versionCode = 8
-        versionName = "1.6"
+        targetSdk = 35
+        versionCode = 11
+        versionName = "1.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,7 +22,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -33,7 +34,6 @@ android {
     kotlinOptions {
         jvmTarget = "1.8"
     }
-    // The buildFeatures for compose has been removed.
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -42,18 +42,11 @@ android {
 }
 
 dependencies {
-    implementation("androidx.appcompat:appcompat:1.6.1") // Updated version
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
-    // Added for registerForActivityResult
-    implementation("androidx.activity:activity-ktx:1.8.0")
+    implementation(libs.androidx.activity.ktx)
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-
-    // ADDED: Material Components Library dependency
-    // Always check for the latest stable version on Google's Maven Repository:
-    // https://maven.google.com/web/index.html#com.google.android.material:material
-    implementation("com.google.android.material:material:1.12.0") // Using a recent stable version
-
-    // --- All Jetpack Compose dependencies have been removed ---
+    implementation("com.google.android.material:material:1.12.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
