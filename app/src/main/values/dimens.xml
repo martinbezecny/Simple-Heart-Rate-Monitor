@@ -6,7 +6,7 @@
     <dimen name="button_increase_text_size">28sp</dimen>
     <dimen name="button_decrease_text_size">18sp</dimen>
 
-    <dimen name="button_control_width">80sp</dimen>
-    <dimen name="button_control_height">60sp</dimen>
-    <dimen name="button_connect_width">120sp</dimen>
+    <dimen name="button_control_width">72dp</dimen>
+    <dimen name="button_control_height">60dp</dimen>
+    <dimen name="button_connect_width">108dp</dimen>
 </resources>
