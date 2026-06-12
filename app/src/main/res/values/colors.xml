@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Day palette: warm paper, ink, one red heart -->
+    <color name="bg">#FAFAF7</color>
+    <color name="ink">#191C1E</color>
+    <color name="text_subtle">#6B7278</color>
+    <color name="chip_bg">#ECEDE8</color>
+    <color name="button_bg">#191C1E</color>
+    <color name="button_fg">#FCFCFA</color>
+    <color name="heart">#E2555F</color>
+
+    <!-- Status dot colors, shared by both modes -->
+    <color name="status_connected">#4DA97C</color>
+    <color name="status_busy">#DCA23C</color>
+    <color name="status_idle">#98A0A6</color>
+</resources>
