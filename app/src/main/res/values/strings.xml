@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Simple Heart Rate Monitor</string>
+    <string name="connect">Connect</string>
+    <string name="increase_font_symbol">A+</string>
+    <string name="decrease_font_symbol">A−</string>
+    <string name="bpm_placeholder">---</string>
+    <string name="bpm_unit">BPM</string>
+    <string name="average_bpm_placeholder">Avg: ---</string>
+    <string name="average_bpm_format">Avg: %1$d</string>
+    <string name="reset_average_hint">Tap to reset.</string>
+    <string name="content_desc_increase_font">Increase font size</string>
+    <string name="content_desc_decrease_font">Decrease font size</string>
+    <string name="content_desc_toggle_theme">Toggle light/dark theme</string>
+
+    <string name="status_not_connected">Not connected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_reconnecting">Reconnecting…</string>
+    <string name="status_connected">Connected</string>
+
+    <string name="permissions_denied">All necessary permissions must be granted to use this app.</string>
+    <string name="permission_rationale_title">Bluetooth Permission Needed</string>
+    <string name="permission_rationale_message">This app needs Bluetooth permission to discover and connect to your heart rate monitor. Please grant the permission to continue.</string>
+    <string name="permission_settings_title">Permission Required</string>
+    <string name="permission_settings_message">Bluetooth permission was permanently denied. Please enable it in the app settings to use this app.</string>
+    <string name="open_settings">Open Settings</string>
+    <string name="grant">Grant</string>
+    <string name="cancel">Cancel</string>
+
+    <string name="bluetooth_required">Bluetooth is required to find devices.</string>
+    <string name="bluetooth_not_supported">Bluetooth is not supported on this device.</string>
+    <string name="ble_not_supported">Bluetooth Low Energy is not supported on this device.</string>
+    <string name="bluetooth_turned_off">Bluetooth was turned off — connection ended.</string>
+
+    <string name="location_needed_title">Location Must Be On</string>
+    <string name="location_needed_message">On this Android version, the system only delivers Bluetooth scan results while Location is switched on. The app itself does not use or store your location.</string>
+
+    <string name="searching_for_devices">Searching for devices…</string>
+    <string name="dialog_title_select_device">Select device</string>
+    <string name="no_devices_found">No heart rate devices found.</string>
+    <string name="scan_failed">Device search failed (error %1$d). Please try again.</string>
+
+    <string name="discovery_failed">Couldn\'t read the device\'s services. Try connecting again.</string>
+    <string name="hr_not_supported">This device doesn\'t provide heart rate measurements.</string>
+    <string name="notify_setup_failed">Couldn\'t enable heart rate updates on this device.</string>
+    <string name="reconnect_failed">Could not reconnect. Tap Connect to try again.</string>
+</resources>
