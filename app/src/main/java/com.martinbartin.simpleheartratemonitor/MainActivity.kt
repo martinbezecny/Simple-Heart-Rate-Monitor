@@ -16,31 +16,41 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
-import android.net.Uri
-import android.provider.Settings
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Color
+import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.provider.Settings
+import android.util.Log
 import android.view.View
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.ImageView
+import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.UUID
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -52,36 +62,59 @@ class MainActivity : AppCompatActivity() {
     private lateinit var devicesArrayAdapter: ArrayAdapter<String>
     private val discoveredDevices = ArrayList<BluetoothDevice>()
 
+    // All mutable state below is confined to the main thread. Bluetooth callbacks
+    // arrive on binder threads and hop to mainHandler before touching any of it.
     private var bluetoothGatt: BluetoothGatt? = null
-    private var devicesDialog: AlertDialog? = null
+    private var devicesSheet: BottomSheetDialog? = null
     private var isScanning = false
     private var lastConnectedDevice: BluetoothDevice? = null
+    private var lastConnectedLabel: String? = null
     private var reconnectAttempt = 0
     private var userRequestedDisconnect = false
-
-    private lateinit var txtHeartRate: TextView
-    private lateinit var txtAverageHeartRate: TextView
-    private lateinit var txtResetHint: TextView
+    private var reconnectRunnable: Runnable? = null
 
     private lateinit var mainContainer: View
-    private lateinit var btnTheme: Button
+    private lateinit var statusDot: View
+    private lateinit var txtStatus: TextView
+    private lateinit var imgHeart: ImageView
+    private lateinit var txtHeartRate: TextView
+    private lateinit var txtBpmLabel: TextView
+    private lateinit var txtAverageHeartRate: TextView
+    private lateinit var txtResetHint: TextView
+    private lateinit var btnTheme: MaterialButton
     private lateinit var btnConnect: Button
     private lateinit var btnIncrease: Button
     private lateinit var btnDecrease: Button
 
-    private val bpmValues = mutableListOf<Int>()
+    // Running average; no need to keep every sample.
+    private var bpmSum = 0L
+    private var bpmCount = 0
+
+    // Heartbeat animation, paced by the latest reading.
+    private var currentBpm = 0
+    private var heartbeatRunning = false
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            if (!heartbeatRunning) return
+            beatOnce()
+            val intervalMs =
+                if (currentBpm in 25..250) (60_000L / currentBpm) else 1_000L
+            mainHandler.postDelayed(this, intervalMs.coerceAtLeast(300L))
+        }
+    }
+
     private lateinit var themePrefs: SharedPreferences
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scanTimeoutRunnable = Runnable { onScanTimeout() }
     private var currentFontSizeSp = DEFAULT_FONT_SIZE_SP
 
     companion object {
-        private const val PERMISSION_REQUEST_CODE = 101
+        private const val TAG = "HeartRateMonitor"
         private val HEART_RATE_SERVICE_UUID = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb")
         private val HEART_RATE_MEASUREMENT_CHAR_UUID = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb")
         private val CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         private const val PREFS_NAME = "ThemePrefs"
         private const val KEY_IS_DARK = "isDarkMode"
-        private const val PREF_PERMISSIONS_ASKED = "permissionsAsked"
         private const val KEY_FONT_SIZE_SP = "fontSizeSp"
         private const val DEFAULT_FONT_SIZE_SP = 190f
         private const val SCAN_DURATION_MS = 15_000L
@@ -90,62 +123,114 @@ class MainActivity : AppCompatActivity() {
         private const val MIN_FONT_SIZE_SP = 20f
         private const val MAX_FONT_SIZE_SP = 400f
         private const val FONT_STEP_SP = 10f
+        private const val HEART_DIM_ALPHA = 0.35f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        themePrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val isDark = themePrefs.getBoolean(KEY_IS_DARK, false)
+        // Pin the whole app — dialogs and sheets included — to the in-app theme
+        // choice, so the system dark-mode setting can't make them disagree.
+        applyNightMode(isDark)
+
         setContentView(R.layout.activity_main)
 
         mainContainer = findViewById(R.id.main_container)
+        statusDot = findViewById(R.id.statusDot)
+        txtStatus = findViewById(R.id.txtStatus)
+        imgHeart = findViewById(R.id.imgHeart)
+        txtHeartRate = findViewById(R.id.txtHeartRate)
+        txtBpmLabel = findViewById(R.id.txtBpmLabel)
+        txtAverageHeartRate = findViewById(R.id.txtAverageHeartRate)
+        txtResetHint = findViewById(R.id.txtResetHint)
         btnTheme = findViewById(R.id.btnTheme)
         btnConnect = findViewById(R.id.btnConnect)
         btnIncrease = findViewById(R.id.btnIncrease)
         btnDecrease = findViewById(R.id.btnDecrease)
-        txtHeartRate = findViewById(R.id.txtHeartRate)
-        txtAverageHeartRate = findViewById(R.id.txtAverageHeartRate)
-        txtResetHint = findViewById(R.id.txtResetHint)
 
-        themePrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        applyColors(themePrefs.getBoolean(KEY_IS_DARK, false))
+        applyColors(isDark)
+        imgHeart.alpha = HEART_DIM_ALPHA
+        showStatus(getString(R.string.status_not_connected), R.color.status_idle)
 
         // Restore saved font size
         currentFontSizeSp = themePrefs.getFloat(KEY_FONT_SIZE_SP, DEFAULT_FONT_SIZE_SP)
         txtHeartRate.textSize = currentFontSizeSp
 
-        devicesArrayAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1)
+        devicesArrayAdapter = ArrayAdapter(this, R.layout.item_device)
 
         btnTheme.setOnClickListener {
             val newMode = !themePrefs.getBoolean(KEY_IS_DARK, false)
             themePrefs.edit().putBoolean(KEY_IS_DARK, newMode).apply()
+            applyNightMode(newMode)
             applyColors(newMode)
         }
 
         setupUIListeners()
+
+        // React immediately if Bluetooth is switched off while we're scanning or connected.
+        ContextCompat.registerReceiver(
+            this,
+            bluetoothStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
+    private fun applyNightMode(isDark: Boolean) {
+        AppCompatDelegate.setDefaultNightMode(
+            if (isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+        )
+    }
+
+    /**
+     * Repaints the screen from the color resources. After [applyNightMode] the
+     * resources resolve to the matching day/night palette, so this stays the
+     * single repaint pass for both themes.
+     */
     private fun applyColors(isDark: Boolean) {
-        val bgColor = if (isDark) Color.BLACK else Color.WHITE
-        val btnColor = if (isDark) Color.parseColor("#333333") else Color.BLACK
-        val textColor = if (isDark) Color.WHITE else Color.BLACK
-        val hintColor = if (isDark) Color.parseColor("#AAAAAA") else Color.parseColor("#808080")
+        fun color(res: Int) = ContextCompat.getColor(this, res)
+        fun tint(res: Int) = ColorStateList.valueOf(color(res))
 
-        mainContainer.setBackgroundColor(bgColor)
+        val ink = color(R.color.ink)
+        val subtle = color(R.color.text_subtle)
 
-        listOf(btnConnect, btnIncrease, btnDecrease, btnTheme).forEach {
-            it.backgroundTintList = ColorStateList.valueOf(btnColor)
-            it.setTextColor(Color.WHITE)
+        mainContainer.setBackgroundColor(color(R.color.bg))
+
+        txtHeartRate.setTextColor(ink)
+        txtBpmLabel.setTextColor(subtle)
+        txtAverageHeartRate.setTextColor(ink)
+        txtAverageHeartRate.backgroundTintList = tint(R.color.chip_bg)
+        txtResetHint.setTextColor(subtle)
+        txtStatus.setTextColor(subtle)
+        imgHeart.imageTintList = tint(R.color.heart)
+
+        btnConnect.backgroundTintList = tint(R.color.button_bg)
+        btnConnect.setTextColor(color(R.color.button_fg))
+
+        listOf(btnIncrease, btnDecrease).forEach {
+            it.backgroundTintList = tint(R.color.chip_bg)
+            it.setTextColor(ink)
         }
-
-        txtHeartRate.setTextColor(textColor)
-        txtAverageHeartRate.setTextColor(textColor)
-        txtResetHint.setTextColor(hintColor)
+        btnTheme.backgroundTintList = tint(R.color.chip_bg)
+        btnTheme.iconTint = tint(R.color.ink)
+        btnTheme.setIconResource(if (isDark) R.drawable.ic_moon else R.drawable.ic_sun)
 
         val windowController = WindowInsetsControllerCompat(window, window.decorView)
         windowController.isAppearanceLightStatusBars = !isDark
-        window.statusBarColor = bgColor
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            // Deprecated and a no-op under Android 15's enforced edge-to-edge;
+            // still needed for older versions.
+            @Suppress("DEPRECATION")
+            window.statusBarColor = color(R.color.bg)
+        }
+    }
 
-        btnTheme.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
-        btnTheme.text = getString(if (isDark) R.string.theme_dark else R.string.theme_light)
+    private fun showStatus(text: CharSequence, dotColorRes: Int) {
+        txtStatus.text = text
+        statusDot.backgroundTintList =
+            ColorStateList.valueOf(ContextCompat.getColor(this, dotColorRes))
     }
 
     private fun setupUIListeners() {
@@ -170,6 +255,32 @@ class MainActivity : AppCompatActivity() {
         txtAverageHeartRate.setOnClickListener { resetAverageBPM() }
     }
 
+    // ── Heartbeat animation ──────────────────────────────────────────────────────
+
+    private fun beatOnce() {
+        imgHeart.animate().scaleX(1.14f).scaleY(1.14f).setDuration(110)
+            .withEndAction {
+                imgHeart.animate().scaleX(1f).scaleY(1f).setDuration(190).start()
+            }
+            .start()
+    }
+
+    private fun startHeartbeat() {
+        if (heartbeatRunning) return
+        heartbeatRunning = true
+        imgHeart.alpha = 1f
+        mainHandler.post(heartbeatRunnable)
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatRunning = false
+        mainHandler.removeCallbacks(heartbeatRunnable)
+        imgHeart.animate().cancel()
+        imgHeart.scaleX = 1f
+        imgHeart.scaleY = 1f
+        imgHeart.alpha = HEART_DIM_ALPHA
+    }
+
     // ── Permissions ──────────────────────────────────────────────────────────────
 
     private fun getRequiredPermissions(): Array<String> =
@@ -184,52 +295,41 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (missingPermissions.isEmpty()) {
-            initiateBluetoothAction()
-            return
-        }
-
-        // Check if any missing permission was permanently denied ("Don't ask again").
-        // shouldShowRequestPermissionRationale returns false in two cases:
-        //   1. Permission was never requested yet (first launch)
-        //   2. User tapped "Don't ask again"
-        // We distinguish them by checking if we've ever asked before.
-        val permanentlyDenied = missingPermissions.any { permission ->
-            !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
-                    && themePrefs.getBoolean(PREF_PERMISSIONS_ASKED, false)
-        }
-
-        if (permanentlyDenied) {
-            // System won't show the prompt anymore — guide user to Settings
-            showOpenSettingsDialog()
-        } else if (missingPermissions.any { ActivityCompat.shouldShowRequestPermissionRationale(this, it) }) {
-            // User denied before but didn't pick "Don't ask again" — show rationale then re-ask
-            showPermissionRationaleDialog(missingPermissions.toTypedArray())
-        } else {
-            // First time asking
-            requestPermissions(missingPermissions.toTypedArray())
+        when {
+            missingPermissions.isEmpty() -> initiateBluetoothAction()
+            // Denied before, but the system is still willing to ask — explain first.
+            missingPermissions.any { ActivityCompat.shouldShowRequestPermissionRationale(this, it) } ->
+                showPermissionRationaleDialog(missingPermissions.toTypedArray())
+            else -> permissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 
-    private fun requestPermissions(permissions: Array<String>) {
-        // Remember that we've asked at least once
-        themePrefs.edit().putBoolean(PREF_PERMISSIONS_ASKED, true).apply()
-        ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE)
-    }
+    private val permissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            when {
+                results.values.all { it } -> initiateBluetoothAction()
+                // Denied just now AND the system refuses to ask again ("Don't ask again"):
+                // only Settings can help from here.
+                results.any { (permission, granted) ->
+                    !granted && !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+                } -> showOpenSettingsDialog()
+                else -> showToast(getString(R.string.permissions_denied))
+            }
+        }
 
     private fun showPermissionRationaleDialog(permissions: Array<String>) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.permission_rationale_title))
             .setMessage(getString(R.string.permission_rationale_message))
             .setPositiveButton(getString(R.string.grant)) { _, _ ->
-                requestPermissions(permissions)
+                permissionLauncher.launch(permissions)
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     private fun showOpenSettingsDialog() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.permission_settings_title))
             .setMessage(getString(R.string.permission_settings_message))
             .setPositiveButton(getString(R.string.open_settings)) { _, _ ->
@@ -242,10 +342,9 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** When user comes back from Settings, re-check permissions automatically. */
+    /** When the user comes back from any Settings screen, re-check and continue automatically. */
     private val settingsLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            // User is back from Settings — check if they granted the permissions
             val allGranted = getRequiredPermissions().all {
                 ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
             }
@@ -253,21 +352,6 @@ class MainActivity : AppCompatActivity() {
                 initiateBluetoothAction()
             }
         }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                initiateBluetoothAction()
-            } else {
-                showToast(getString(R.string.permissions_denied))
-            }
-        }
-    }
 
     // ── Bluetooth ────────────────────────────────────────────────────────────────
 
@@ -281,24 +365,54 @@ class MainActivity : AppCompatActivity() {
             showToast(getString(R.string.ble_not_supported))
             return
         }
-        if (adapter.isEnabled) {
-            startBleScan()
-        } else {
+        if (!adapter.isEnabled) {
             requestEnableBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
         }
+        // On Android 6–11 the system delivers no BLE scan results unless
+        // Location is switched on, even with the permission granted.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && !isLocationEnabled()) {
+            showLocationDialog()
+            return
+        }
+        startBleScan()
+    }
+
+    private fun isLocationEnabled(): Boolean {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
+            @Suppress("DEPRECATION")
+            (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                    || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
+        }
+    }
+
+    private fun showLocationDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.location_needed_title))
+            .setMessage(getString(R.string.location_needed_message))
+            .setPositiveButton(getString(R.string.open_settings)) { _, _ ->
+                settingsLauncher.launch(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
     }
 
     @SuppressLint("MissingPermission")
     private fun startBleScan() {
         if (isScanning) return
 
-        // Cancel any pending auto-reconnect
+        // Starting a new search means abandoning the current connection.
         userRequestedDisconnect = true
-        mainHandler.removeCallbacksAndMessages(null)
-        bluetoothGatt?.close()
-        bluetoothGatt = null
+        cancelReconnect()
+        closeGatt()
         lastConnectedDevice = null
+        lastConnectedLabel = null
         reconnectAttempt = 0
+        resetDisplay()
+        setKeepScreenOn(false)
 
         bleScanner = bluetoothAdapter?.bluetoothLeScanner
         if (bleScanner == null) {
@@ -319,86 +433,133 @@ class MainActivity : AppCompatActivity() {
 
         bleScanner?.startScan(listOf(scanFilter), scanSettings, bleScanCallback)
         isScanning = true
+        showStatus(getString(R.string.searching_for_devices), R.color.status_busy)
 
-        showDeviceListDialog()
+        showDeviceSheet()
 
-        // Auto-stop scan after timeout
-        mainHandler.postDelayed({
-            stopBleScan()
-        }, SCAN_DURATION_MS)
+        mainHandler.postDelayed(scanTimeoutRunnable, SCAN_DURATION_MS)
     }
 
     @SuppressLint("MissingPermission")
     private fun stopBleScan() {
-        if (isScanning) {
-            bleScanner?.stopScan(bleScanCallback)
-            isScanning = false
+        if (!isScanning) return
+        isScanning = false
+        mainHandler.removeCallbacks(scanTimeoutRunnable)
+        // stopScan throws if Bluetooth was switched off mid-scan.
+        runCatching { bleScanner?.stopScan(bleScanCallback) }
+            .onFailure { Log.w(TAG, "stopScan failed", it) }
+    }
+
+    /** Scan window elapsed: show the result in the sheet instead of leaving it ambiguous. */
+    private fun onScanTimeout() {
+        stopBleScan()
+        val sheet = devicesSheet
+        if (sheet?.isShowing != true) {
+            showStatus(getString(R.string.status_not_connected), R.color.status_idle)
+            return
         }
+        sheet.findViewById<View>(R.id.sheetProgress)?.visibility = View.GONE
+        if (discoveredDevices.isEmpty()) {
+            sheet.findViewById<View>(R.id.sheetEmpty)?.visibility = View.VISIBLE
+        }
+        showStatus(getString(R.string.status_not_connected), R.color.status_idle)
     }
 
     private val bleScanCallback = object : ScanCallback() {
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
-            val deviceName = device.name ?: return
-            if (!discoveredDevices.contains(device)) {
-                discoveredDevices.add(device)
-                runOnUiThread {
-                    devicesArrayAdapter.add(deviceName)
-                    devicesArrayAdapter.notifyDataSetChanged()
+            // Fall back to the advertised name, then the address, so nameless
+            // straps still show up (the scan filter guarantees they're HR devices).
+            val label = result.scanRecord?.deviceName ?: device.name ?: device.address
+            mainHandler.post {
+                if (!discoveredDevices.contains(device)) {
+                    discoveredDevices.add(device)
+                    devicesArrayAdapter.add(label)
                 }
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            isScanning = false
-            runOnUiThread {
-                showToast(getString(R.string.search_finished))
+            Log.w(TAG, "BLE scan failed, errorCode=$errorCode")
+            mainHandler.post {
+                isScanning = false
+                mainHandler.removeCallbacks(scanTimeoutRunnable)
+                devicesSheet?.dismiss()
+                showStatus(getString(R.string.status_not_connected), R.color.status_idle)
+                showToast(getString(R.string.scan_failed, errorCode))
             }
         }
     }
 
-    private fun showDeviceListDialog() {
-        if (devicesDialog?.isShowing == true) return
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle(R.string.dialog_title_select_device)
-        builder.setAdapter(devicesArrayAdapter) { _, which ->
-            stopBleScan()
-            val device = discoveredDevices[which]
-            connectDevice(device)
-            devicesDialog?.dismiss()
+    private fun showDeviceSheet() {
+        if (devicesSheet?.isShowing == true) return
+        val sheet = BottomSheetDialog(this)
+        sheet.setContentView(R.layout.sheet_device_picker)
+        sheet.findViewById<ListView>(R.id.sheetList)?.apply {
+            adapter = devicesArrayAdapter
+            setOnItemClickListener { _, _, which, _ ->
+                stopBleScan()
+                connectDevice(discoveredDevices[which])
+                sheet.dismiss()
+            }
         }
-        builder.setOnDismissListener {
+        sheet.setOnDismissListener {
             stopBleScan()
+            // Only fall back to idle if dismissing didn't lead into a connection.
+            if (lastConnectedDevice == null) {
+                showStatus(getString(R.string.status_not_connected), R.color.status_idle)
+            }
         }
-        devicesDialog = builder.create()
-        devicesDialog?.show()
+        devicesSheet = sheet
+        sheet.show()
     }
 
     @SuppressLint("MissingPermission")
     private fun connectDevice(device: BluetoothDevice) {
-        bluetoothGatt?.close()
+        closeGatt()
         lastConnectedDevice = device
+        lastConnectedLabel = device.name ?: device.address
         userRequestedDisconnect = false
+        reconnectAttempt = 0
+        showStatus(getString(R.string.status_connecting), R.color.status_busy)
         bluetoothGatt = device.connectGatt(this, false, gattCallback)
     }
 
+    @SuppressLint("MissingPermission")
+    private fun closeGatt() {
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+    }
+
     private val gattCallback = object : BluetoothGattCallback() {
+
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    reconnectAttempt = 0
-                    gatt.discoverServices()
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    gatt.close()
-                    if (!userRequestedDisconnect && lastConnectedDevice != null) {
-                        scheduleReconnect()
-                    } else {
-                        runOnUiThread {
-                            txtHeartRate.text = getString(R.string.bpm_placeholder)
-                            resetAverageBPM()
+            Log.d(TAG, "Connection state changed: state=$newState status=$status")
+            mainHandler.post {
+                when (newState) {
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        reconnectAttempt = 0
+                        setKeepScreenOn(true)
+                        showStatus(
+                            lastConnectedLabel ?: getString(R.string.status_connected),
+                            R.color.status_connected
+                        )
+                        gatt.discoverServices()
+                    }
+                    BluetoothProfile.STATE_DISCONNECTED -> {
+                        if (status != BluetoothGatt.GATT_SUCCESS) {
+                            Log.w(TAG, "Disconnected with status=$status")
+                        }
+                        gatt.close()
+                        if (bluetoothGatt === gatt) bluetoothGatt = null
+                        if (!userRequestedDisconnect && lastConnectedDevice != null) {
+                            scheduleReconnect()
+                        } else {
+                            resetDisplay()
+                            setKeepScreenOn(false)
+                            showStatus(getString(R.string.status_not_connected), R.color.status_idle)
                         }
                     }
                 }
@@ -406,33 +567,54 @@ class MainActivity : AppCompatActivity() {
         }
 
         @SuppressLint("MissingPermission")
-        @Suppress("DEPRECATION")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) return
+            mainHandler.post {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.w(TAG, "Service discovery failed, status=$status")
+                    failConnection(R.string.discovery_failed)
+                    return@post
+                }
+                val characteristic = gatt.getService(HEART_RATE_SERVICE_UUID)
+                    ?.getCharacteristic(HEART_RATE_MEASUREMENT_CHAR_UUID)
+                if (characteristic == null) {
+                    failConnection(R.string.hr_not_supported)
+                    return@post
+                }
+                gatt.setCharacteristicNotification(characteristic, true)
 
-            val service = gatt.getService(HEART_RATE_SERVICE_UUID) ?: return
-            val char = service.getCharacteristic(HEART_RATE_MEASUREMENT_CHAR_UUID) ?: return
+                val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID)
+                if (descriptor == null) {
+                    failConnection(R.string.notify_setup_failed)
+                    return@post
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    run {
+                        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                        gatt.writeDescriptor(descriptor)
+                    }
+                }
+            }
+        }
 
-            gatt.setCharacteristicNotification(char, true)
-
-            val desc = char.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID) ?: return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                gatt.writeDescriptor(desc, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-            } else {
-                desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                gatt.writeDescriptor(desc)
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "Descriptor write failed, status=$status")
+                mainHandler.post { failConnection(R.string.notify_setup_failed) }
             }
         }
 
         @Deprecated("Deprecated in API 33")
+        @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            if (characteristic.uuid == HEART_RATE_MEASUREMENT_CHAR_UUID) {
-                val heartRate = extractHeartRate(characteristic)
-                runOnUiThread {
-                    txtHeartRate.text = heartRate.toString()
-                    updateAverageBPM(heartRate)
-                }
-            }
+            // Android 13+ delivers the same packet to the newer overload below as well;
+            // bail out here so each reading is counted exactly once.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return
+            if (characteristic.uuid != HEART_RATE_MEASUREMENT_CHAR_UUID) return
+            val value = characteristic.value ?: return
+            handleHeartRatePacket(value)
         }
 
         // API 33+ variant
@@ -441,14 +623,32 @@ class MainActivity : AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            if (characteristic.uuid == HEART_RATE_MEASUREMENT_CHAR_UUID) {
-                val heartRate = extractHeartRateFromBytes(value)
-                runOnUiThread {
-                    txtHeartRate.text = heartRate.toString()
-                    updateAverageBPM(heartRate)
-                }
-            }
+            if (characteristic.uuid != HEART_RATE_MEASUREMENT_CHAR_UUID) return
+            handleHeartRatePacket(value)
         }
+    }
+
+    private fun handleHeartRatePacket(value: ByteArray) {
+        val heartRate = extractHeartRateFromBytes(value) ?: return
+        mainHandler.post {
+            txtHeartRate.text = heartRate.toString()
+            updateAverageBPM(heartRate)
+            currentBpm = heartRate
+            startHeartbeat()
+        }
+    }
+
+    /** Tears down a connection that can't deliver heart rate data, with feedback. */
+    private fun failConnection(messageRes: Int) {
+        showToast(getString(messageRes))
+        userRequestedDisconnect = true
+        cancelReconnect()
+        closeGatt()
+        lastConnectedDevice = null
+        lastConnectedLabel = null
+        resetDisplay()
+        setKeepScreenOn(false)
+        showStatus(getString(R.string.status_not_connected), R.color.status_idle)
     }
 
     // ── Auto-Reconnect ─────────────────────────────────────────────────────────
@@ -456,68 +656,103 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("MissingPermission")
     private fun scheduleReconnect() {
         if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            runOnUiThread {
-                txtHeartRate.text = getString(R.string.bpm_placeholder)
-                resetAverageBPM()
-                showToast(getString(R.string.reconnect_failed))
-            }
+            resetDisplay()
+            setKeepScreenOn(false)
+            showStatus(getString(R.string.status_not_connected), R.color.status_idle)
+            showToast(getString(R.string.reconnect_failed))
             lastConnectedDevice = null
+            lastConnectedLabel = null
             reconnectAttempt = 0
             return
         }
 
         reconnectAttempt++
-        val delay = RECONNECT_BASE_DELAY_MS * reconnectAttempt
-        runOnUiThread {
-            showToast(getString(R.string.reconnecting, reconnectAttempt, MAX_RECONNECT_ATTEMPTS))
-        }
+        showStatus(getString(R.string.status_reconnecting), R.color.status_busy)
 
-        mainHandler.postDelayed({
-            lastConnectedDevice?.let { device ->
-                bluetoothGatt?.close()
-                bluetoothGatt = device.connectGatt(this, false, gattCallback)
+        val runnable = Runnable {
+            reconnectRunnable = null
+            val device = lastConnectedDevice ?: return@Runnable
+            closeGatt()
+            bluetoothGatt = device.connectGatt(this, false, gattCallback)
+        }
+        reconnectRunnable = runnable
+        mainHandler.postDelayed(runnable, RECONNECT_BASE_DELAY_MS * reconnectAttempt)
+    }
+
+    private fun cancelReconnect() {
+        reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+    }
+
+    // ── Bluetooth switched off ───────────────────────────────────────────────────
+
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            if (state == BluetoothAdapter.STATE_TURNING_OFF || state == BluetoothAdapter.STATE_OFF) {
+                // Receivers registered on the main looper run on the main thread.
+                onBluetoothTurnedOff()
             }
-        }, delay)
+        }
+    }
+
+    private fun onBluetoothTurnedOff() {
+        val wasActive = isScanning || bluetoothGatt != null || lastConnectedDevice != null
+        userRequestedDisconnect = true
+        cancelReconnect()
+        stopBleScan()
+        lastConnectedDevice = null
+        lastConnectedLabel = null
+        devicesSheet?.dismiss()
+        closeGatt()
+        reconnectAttempt = 0
+        resetDisplay()
+        setKeepScreenOn(false)
+        showStatus(getString(R.string.status_not_connected), R.color.status_idle)
+        if (wasActive) {
+            showToast(getString(R.string.bluetooth_turned_off))
+        }
     }
 
     // ── Heart Rate Parsing ───────────────────────────────────────────────────────
 
-    @Suppress("DEPRECATION")
-    private fun extractHeartRate(characteristic: BluetoothGattCharacteristic): Int {
-        val flag = characteristic.value[0].toInt()
-        val format = if ((flag and 0x01) != 0) {
-            BluetoothGattCharacteristic.FORMAT_UINT16
-        } else {
-            BluetoothGattCharacteristic.FORMAT_UINT8
-        }
-        return characteristic.getIntValue(format, 1)
-    }
-
-    private fun extractHeartRateFromBytes(value: ByteArray): Int {
-        if (value.isEmpty()) return 0
-        val flag = value[0].toInt()
-        return if ((flag and 0x01) != 0) {
+    /**
+     * Parses a Heart Rate Measurement packet (GATT characteristic 0x2A37).
+     * Returns null for malformed packets so they never poison the average.
+     */
+    private fun extractHeartRateFromBytes(value: ByteArray): Int? {
+        if (value.isEmpty()) return null
+        val flags = value[0].toInt()
+        return if ((flags and 0x01) != 0) {
             // UINT16 format
-            if (value.size >= 3) (value[1].toInt() and 0xFF) or ((value[2].toInt() and 0xFF) shl 8)
-            else 0
+            if (value.size >= 3) (value[1].toInt() and 0xFF) or ((value[2].toInt() and 0xFF) shl 8) else null
         } else {
             // UINT8 format
-            if (value.size >= 2) value[1].toInt() and 0xFF
-            else 0
+            if (value.size >= 2) value[1].toInt() and 0xFF else null
         }
     }
 
     // ── Average BPM ──────────────────────────────────────────────────────────────
 
     private fun updateAverageBPM(newBPM: Int) {
-        bpmValues.add(newBPM)
-        val average = bpmValues.average().toInt()
+        bpmSum += newBPM
+        bpmCount++
+        val average = (bpmSum.toDouble() / bpmCount).roundToInt()
         txtAverageHeartRate.text = getString(R.string.average_bpm_format, average)
     }
 
     private fun resetAverageBPM() {
-        bpmValues.clear()
+        bpmSum = 0L
+        bpmCount = 0
         txtAverageHeartRate.text = getString(R.string.average_bpm_placeholder)
+    }
+
+    private fun resetDisplay() {
+        txtHeartRate.text = getString(R.string.bpm_placeholder)
+        resetAverageBPM()
+        currentBpm = 0
+        stopHeartbeat()
     }
 
     // ── Activity Result ──────────────────────────────────────────────────────────
@@ -525,11 +760,22 @@ class MainActivity : AppCompatActivity() {
     private val requestEnableBluetooth =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                startBleScan()
+                initiateBluetoothAction()
+            } else {
+                showToast(getString(R.string.bluetooth_required))
             }
         }
 
     // ── Utilities ────────────────────────────────────────────────────────────────
+
+    /** Keep the display awake only while a strap is actually connected. */
+    private fun setKeepScreenOn(keepOn: Boolean) {
+        if (keepOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -539,10 +785,13 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         userRequestedDisconnect = true
+        heartbeatRunning = false
         mainHandler.removeCallbacksAndMessages(null)
         stopBleScan()
-        bluetoothGatt?.close()
-        bluetoothGatt = null
+        devicesSheet?.dismiss()
+        devicesSheet = null
+        closeGatt()
         lastConnectedDevice = null
+        unregisterReceiver(bluetoothStateReceiver)
     }
 }
