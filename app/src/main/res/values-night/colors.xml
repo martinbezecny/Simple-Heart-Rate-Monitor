@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Night palette: near-black, soft white, brighter heart -->
+    <color name="bg">#0F1113</color>
+    <color name="ink">#ECEEF0</color>
+    <color name="text_subtle">#989FA6</color>
+    <color name="chip_bg">#1C1F22</color>
+    <color name="button_bg">#ECEEF0</color>
+    <color name="button_fg">#141619</color>
+    <color name="heart">#F07A80</color>
+</resources>
