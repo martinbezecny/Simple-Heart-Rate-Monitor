@@ -8,94 +8,160 @@
     android:fitsSystemWindows="true"
     tools:context=".MainActivity">
 
-    <Button
-        android:id="@+id/btnConnect"
-        android:layout_width="@dimen/button_connect_width"
-        android:layout_height="@dimen/button_control_height"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="8dp"
-        android:drawableStart="@android:drawable/stat_sys_data_bluetooth"
-        android:text="@string/connect"
+    <!-- Status: a quiet dot and a word, top-left -->
+    <View
+        android:id="@+id/statusDot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_marginStart="24dp"
+        android:background="@drawable/status_dot"
+        app:layout_constraintBottom_toBottomOf="@id/txtStatus"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/txtStatus" />
+
+    <TextView
+        android:id="@+id/txtStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/control_button_size"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="16dp"
+        android:gravity="center_vertical"
+        android:text="@string/status_not_connected"
+        android:textSize="@dimen/status_text_size"
+        app:layout_constraintStart_toEndOf="@id/statusDot"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <Button
-        android:id="@+id/btnIncrease"
-        android:layout_width="@dimen/button_control_width"
-        android:layout_height="@dimen/button_control_height"
-        android:layout_marginTop="8dp"
+    <!-- Quiet controls, top-right: text size down/up, theme -->
+    <LinearLayout
+        android:id="@+id/controlsRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
-        android:contentDescription="@string/content_desc_increase_font"
-        android:text="@string/increase_font_symbol"
-        android:textSize="@dimen/button_increase_text_size"
+        android:orientation="horizontal"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
 
-    <Button
-        android:id="@+id/btnDecrease"
-        android:layout_width="@dimen/button_control_width"
-        android:layout_height="@dimen/button_control_height"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:contentDescription="@string/content_desc_decrease_font"
-        android:text="@string/decrease_font_symbol"
-        android:textSize="@dimen/button_decrease_text_size"
-        app:layout_constraintEnd_toStartOf="@+id/btnIncrease"
-        app:layout_constraintTop_toTopOf="parent" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDecrease"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/control_button_size"
+            android:contentDescription="@string/content_desc_decrease_font"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:letterSpacing="0"
+            android:minWidth="56dp"
+            android:text="@string/decrease_font_symbol"
+            android:textSize="16sp"
+            app:cornerRadius="24dp" />
 
-    <Button
-        android:id="@+id/btnTheme"
-        android:layout_width="@dimen/button_control_width"
-        android:layout_height="@dimen/button_control_height"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:contentDescription="@string/content_desc_toggle_theme"
-        app:layout_constraintEnd_toStartOf="@+id/btnDecrease"
-        app:layout_constraintTop_toTopOf="parent" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnIncrease"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/control_button_size"
+            android:layout_marginStart="8dp"
+            android:contentDescription="@string/content_desc_increase_font"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:letterSpacing="0"
+            android:minWidth="56dp"
+            android:text="@string/increase_font_symbol"
+            android:textSize="16sp"
+            app:cornerRadius="24dp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTheme"
+            android:layout_width="@dimen/control_button_size"
+            android:layout_height="@dimen/control_button_size"
+            android:layout_marginStart="8dp"
+            android:contentDescription="@string/content_desc_toggle_theme"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:padding="0dp"
+            app:cornerRadius="24dp"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="22dp" />
+    </LinearLayout>
+
+    <!-- Hero column: heart, the number, its unit, the average, a caption -->
     <LinearLayout
         android:id="@+id/bpmBlock"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center"
         android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/btnConnect"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/controlsRow">
+
+        <ImageView
+            android:id="@+id/imgHeart"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginBottom="14dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_heart" />
 
         <TextView
             android:id="@+id/txtHeartRate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-light"
             android:includeFontPadding="false"
-            android:keepScreenOn="true"
             android:text="@string/bpm_placeholder"
-            android:textColor="?android:attr/textColorPrimary"
-            android:textSize="@dimen/heart_rate_text_size"
-            android:textStyle="bold" />
+            android:textSize="@dimen/heart_rate_text_size" />
+
+        <TextView
+            android:id="@+id/txtBpmLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.25"
+            android:text="@string/bpm_unit"
+            android:textSize="@dimen/bpm_unit_text_size" />
 
         <TextView
             android:id="@+id/txtAverageHeartRate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="-4dp"
-            android:background="?attr/selectableItemBackground"
+            android:layout_marginTop="26dp"
+            android:background="@drawable/bg_pill"
             android:clickable="true"
             android:focusable="true"
-            android:includeFontPadding="false"
+            android:foreground="?attr/selectableItemBackground"
+            android:paddingStart="22dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="22dp"
+            android:paddingBottom="10dp"
             android:text="@string/average_bpm_placeholder"
-            android:textColor="?android:attr/textColorPrimary"
-            android:textSize="@dimen/average_heart_rate_text_size"
-            android:textStyle="bold" />
+            android:textSize="@dimen/average_text_size" />
 
         <TextView
             android:id="@+id/txtResetHint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="8dp"
             android:text="@string/reset_average_hint"
-            android:textColor="?android:attr/textColorSecondary"
             android:textSize="@dimen/reset_hint_text_size" />
     </LinearLayout>
+
+    <!-- The one full-intent action -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnConnect"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/connect_button_height"
+        android:layout_marginBottom="28dp"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"
+        android:letterSpacing="0.02"
+        android:minWidth="220dp"
+        android:text="@string/connect"
+        android:textSize="16sp"
+        app:cornerRadius="28dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
